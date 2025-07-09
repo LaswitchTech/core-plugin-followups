@@ -1,11 +1,3 @@
-//
-//   Core Framework - Script file
-//
-//   @license    MIT (https://mit-license.org/)
-//   @author     Louis Ouellet <louis@laswitchtech.com>
-//
-
-
 const FollowupForm = function(form,contacts,values = {},modal = null){
 
     // Initialize Values
@@ -33,20 +25,6 @@ const FollowupForm = function(form,contacts,values = {},modal = null){
             }
         }
     }
-
-    // csrf
-    form.add(
-        {
-            name: CSRF_KEY,
-            label: 'csrf',
-            icon: 'hash',
-            type: 'hidden',
-            value: CSRF_TOKEN,
-        },
-        function(input,form){
-            input.css('display','none');
-        },
-    );
 
     // category
     form.add(
@@ -128,120 +106,219 @@ const FollowupForm = function(form,contacts,values = {},modal = null){
 };
 const FollowupModalCreate = function(fields = {}, dt = null, callback = null){
 
-    // Ajax Request
-    $.ajax({
-        url: '/endpoint.php/contacts/index?targetTable='+fields.targetTable+'&targetId='+fields.targetId,
-        type: 'GET',dataType: 'json',
-        success: function(response) {
-            var contacts = [];
-            for(const [id, contact] of Object.entries(response.records ?? {})){
-                var text = contact.vcard.name;
-                if(contact.vcard.title != null){
-                    text += ' - ' + contact.vcard.title;
-                }
+    // Check if a targetTable and targetId are set
+    if(typeof fields.targetTable === 'undefined' || typeof fields.targetId === 'undefined'){
+        console.error("FollowupModalCreate: targetTable or targetId is not set.");
+        return;
+    }
+
+    // Initialize Contacts
+    var contacts = [];
+
+    // Create a function to create contacts from the records
+    function createContact(records, callback = null){
+        for(const [key, contact] of Object.entries(records ?? {})){
+            var id = contact.vcard.id ?? (contact.id ?? null);
+            var name = contact.vcard.name ?? (contact.name ?? null);
+            var title = contact.vcard.title ?? (contact.title ?? null);
+            var text = name;
+            if(title != null){
+                text += ' - ' + contact.vcard.title;
+            }
+            if(id !== null && text !== null){
                 contacts.push({id:contact.vcard.id,text:text});
             }
-            builder.Component(
-                "modal",
-                null,
-                {
-                    onEnter: false,
-                    destroy: true,
-                    icon: "plus-lg",
-                    title: builder.Locale.get("Followup with someone"),
-                    cancel: false,
-                    submit: true,
-                    size: "lg",
-                    callback: {
-                        submit: function(element,modal){
-                            element.form.submit();
-                        },
-                        onHide: function(component,modal){
-                            if(typeof component.record !== 'undefined'){
-                                NoteModal(component.record.id, component.record.subject);
-                            }
-                        },
+        }
+        if(typeof callback === "function"){
+            callback();
+        }
+    }
+
+    // Create and open the modal
+    function createModal(){
+        builder.Component(
+            "modal",
+            null,
+            {
+                onEnter: false,
+                destroy: true,
+                icon: "plus-lg",
+                title: builder.Locale.get("Followup with someone"),
+                cancel: false,
+                submit: true,
+                size: "lg",
+                callback: {
+                    submit: function(element,modal){
+                        element.form.submit();
+                    },
+                    onHide: function(component,modal){
+                        if(typeof component.record !== 'undefined'){
+                            NoteModal(component.record.id, component.record.subject);
+                        }
                     },
                 },
-                function(modal,component){
-                    const componentModal = component;
-                    component.header.addClass('text-bg-success');
-                    component.body.addClass('text-bg-dark');
-                    component.footer.submit.addClass('btn-success').removeClass('btn-link').attr({
-                        "style": "border-bottom-right-radius: var(--bs-modal-inner-border-radius) !important;border-bottom-left-radius: var(--bs-modal-inner-border-radius) !important;",
-                    }).text(builder.Locale.get('Create'));
-                    component.footer.submit.icon = $(document.createElement('i')).addClass('bi bi-stars me-1').prependTo(component.footer.submit);
-                    component.form = builder.Component(
-                        'form',
-                        component.body,
-                        {
-                            class:{
-                                form: 'row row-cols-3',
-                                field: 'mb-3 col',
-                            },
-                            callback:{
-                                val: function(values){
-                                    values.due = values.date+" "+values.time;
-                                    delete values.date;
-                                    delete values.time;
-                                    for(const [key, value] of Object.entries(fields)){
-                                        if(typeof values[key] === 'undefined'){
-                                            values[key] = value;
-                                        }
+            },
+            function(modal,component){
+                const componentModal = component;
+                component.header.addClass('text-bg-success');
+                component.body.addClass('text-bg-dark');
+                component.footer.submit.addClass('btn-success').removeClass('btn-link').attr({
+                    "style": "border-bottom-right-radius: var(--bs-modal-inner-border-radius) !important;border-bottom-left-radius: var(--bs-modal-inner-border-radius) !important;",
+                }).text(builder.Locale.get('Create'));
+                component.footer.submit.icon = $(document.createElement('i')).addClass('bi bi-stars me-1').prependTo(component.footer.submit);
+                component.form = builder.Component(
+                    'form',
+                    component.body,
+                    {
+                        class:{
+                            form: 'row row-cols-3',
+                            field: 'mb-3 col',
+                        },
+                        callback:{
+                            val: function(values){
+                                values.due = values.date+" "+values.time;
+                                delete values.date;
+                                delete values.time;
+                                for(const [key, value] of Object.entries(fields)){
+                                    if(typeof values[key] === 'undefined'){
+                                        values[key] = value;
                                     }
-                                    return values;
-                                },
-                                submit: function(form){
-                                    $.ajax({
-                                        url: '/endpoint.php/followups/create',
-                                        type: 'POST',dataType: 'json',
-                                        data: form.val(),
-                                        success: function(response) {
+                                }
+                                return values;
+                            },
+                            submit: function(form){
+                                $.ajax({
+                                    url: '/api/followups/create',
+                                    headers: {'X-CSRF-Authorization': CSRF_KEY},
+                                    type: 'POST',dataType: 'json',
+                                    data: form.val(),
+                                    success: function(response) {
 
-                                            // Update the CSRF
-                                            CSRF_KEY = response.CSRF.key;
-                                            CSRF_TOKEN = response.CSRF.token;
+                                        // Check if the datatable is available
+                                        if(dt){
 
-                                            // Check if the datatable is available
-                                            if(dt){
-
-                                                // Add the followup to the datatable
-                                                dt.row.add(response.record).draw(false, function(){
-
-                                                    // Check if the callback is a function
-                                                    if(typeof callback === "function"){
-                                                        callback(response.record);
-                                                    }
-                                                });
-                                            } else {
+                                            // Add the followup to the datatable
+                                            dt.row.add(response.record).draw(false, function(){
 
                                                 // Check if the callback is a function
                                                 if(typeof callback === "function"){
                                                     callback(response.record);
                                                 }
-                                            }
+                                            });
+                                        } else {
 
-                                            // Close the modal
-                                            modal.hide();
-
-                                            // Open the task if the followup is a Call
-                                            if(response.record.category === 'Call'){
-                                                TaskModal(response.record.task.id);
+                                            // Check if the callback is a function
+                                            if(typeof callback === "function"){
+                                                callback(response.record);
                                             }
                                         }
-                                    });
-                                },
+
+                                        // Close the modal
+                                        modal.hide();
+
+                                        // Open the task if the followup is a Call
+                                        if(response.record.category === 'Call'){
+                                            TaskModal(response.record.task.id);
+                                        }
+                                    }
+                                });
                             },
                         },
-                        function(form,component){
-                            FollowupForm(form,contacts,fields,componentModal);
-                            modal.show();
-                        },
-                    );
-                },
-            );
-        },
-    });
+                    },
+                    function(form,component){
+                        FollowupForm(form,contacts,fields,componentModal);
+                        modal.show();
+                    },
+                );
+            },
+        );
+    }
+
+    // Retrieve the target
+    function getTarget(){
+
+        // Create a promise
+        return new Promise((resolve, reject) => {
+
+            // Try & Catch
+            try {
+
+                // Ajax Request
+                $.ajax({
+                    url: '/api/'+fields.targetTable+'/fetch?id='+fields.targetId,
+                    headers: {'X-CSRF-Authorization': CSRF_KEY},
+                    type: 'GET',dataType: 'json',
+                    success: function(response) {
+
+                        // Create contacts
+                        createContact([response.record], function(){
+
+                            // Resolve the promise
+                            resolve();
+                        });
+                    },
+                });
+            } catch (error) {
+
+                // Reject the promise
+                reject(error);
+            }
+        });
+    }
+
+    // Retrieve the contacts
+    function getContacts(){
+
+        // Create a promise
+        return new Promise((resolve, reject) => {
+
+            // Try & Catch
+            try {
+
+                // Ajax Request
+                $.ajax({
+                    url: '/api/contacts/fetchAll',
+                    headers: {'X-CSRF-Authorization': CSRF_KEY},
+                    type: 'POST',dataType: 'json',
+                    data: {
+                        conditions: [
+                            {key: 'targetTable', operator: '=', value: fields.targetTable},
+                            {key: 'targetId', operator: '=', value: fields.targetId},
+                            {key: 'isArchived', operator: '<>', value: 1},
+                        ]
+                    },
+                    success: function(response) {
+
+                        // Create contacts
+                        createContact(response.records, function(){
+
+                            // Resolve the promise
+                            resolve();
+                        });
+                    },
+                });
+            } catch (error) {
+
+                // Reject the promise
+                reject(error);
+            }
+        });
+    }
+
+    // Execute the promises sequentially
+    (async function run() {
+        try {
+
+            // Execute each steps sequentially
+            await getTarget();
+            await getContacts();
+
+            // At this point, all awaited promises above have resolved (no errors).
+            createModal();
+        } catch (err) {
+            console.error("An error occurred while creating the followup modal:", err);
+        }
+    })();
 };
 const FollowupModalArchive = function(followup, table, row){
 
@@ -283,7 +360,7 @@ const FollowupModalArchive = function(followup, table, row){
 
                         // AJAX Request
                         $.ajax({
-                            url: '/endpoint.php/followups/archive?id='+followup.id,
+                            url: '/api/followups/archive?id='+followup.id,
                             type: 'GET',dataType: 'json',
                             success: function(response) {
 
@@ -364,7 +441,7 @@ const FollowupsTable = function(category, followups, container, defaults = {}, c
             return object.prop('outerHTML');
         }},
         { target: 2, visible: true, title: builder.Locale.get('Status'), name: 'status', data: 'status', render: function(data, type, row) {
-            if(row.task.progress == 0) {
+            if(row.task.process === null || typeof row.task.process[row.task.progress] === "undefined") {
                 return '<h5><span class="badge text-bg-success" data-type="status" data-task="'+row.task.id+'"><i class="me-1 bi bi-asterisk"></i>'+builder.Locale.get('New')+'</span></h5>';
             } else {
                 return '<h5><span class="badge text-bg-'+row.task.process[row.task.progress].color+'" data-type="status" data-task="'+row.task.id+'"><i class="me-1 bi bi-'+row.task.process[row.task.progress].icon+'"></i>'+row.task.process[row.task.progress].name+'</span></h5>';
@@ -464,7 +541,7 @@ const FollowupsTable = function(category, followups, container, defaults = {}, c
             component.attr({
                 "data-type": "followups",
             })
-            for(const [key, record] of Object.entries(followups)){
+            for(const [key, record] of Object.entries(followups ?? [])){
                 if(record.category === category){
                     table.add(record);
                 }

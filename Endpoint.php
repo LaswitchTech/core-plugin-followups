@@ -1,307 +1,319 @@
 <?php
 
-/**
- * Core Framework - FollowupsEndpoint
- *
- * @license    MIT (https://mit-license.org/)
- * @author     Louis Ouellet <louis@laswitchtech.com>
- */
-
 // Import additionnal class into the global namespace
-use \LaswitchTech\Core\Abstracts\Endpoint;
+use \LaswitchTech\Core\Base\BaseEndpoint;
 
-class FollowupsEndpoint extends Endpoint {
+class FollowupsEndpoint extends BaseEndpoint {
 
     /**
      * Constructor
      */
     public function __construct()
     {
-
-        // Call Parent Constructor
+        // Call the parent constructor
         parent::__construct();
 
-        // Retrieve the namespace
-        $namespace = $this->Request->getNamespace();
-
-        // Set Global access
-        $this->Public = false;
-        $this->Level = 1;
+        // Initialize the Endpoint
+        $this->init('followups');
 
         // Set Properties
-        switch($namespace){
-            case "/followups/create":
-                $this->Level = 2;
-                break;
-            case "/followups/archive":
-            case "/followups/recover":
-                $this->Level = 4;
-                break;
-        }
+        $this->required = ['category','vcard','due','targetTable','targetId'];
+        $this->optional = [];
     }
 
     /**
-     * Create a Followup
+     * Create a record
      */
     public function createAction(): array
     {
-        // Import Global Variables
-        global $CSRF, $DATABASE;
+        // Call the parent constructor
+        $message = parent::createAction();
 
-        // Set the default message
-        $message = ["status" => 200, "message" => "OK", "data" => []];
-
-        // Check the request method
-        if($this->Request->getMethod() == "POST"){
-            $message["data"]["CSRF"] = [
-                "token" => $CSRF->token(),
-                "key" => $CSRF->key()
-            ];
-        }
-
-        // Check if the Note is accessible
+        // Check if the record is accessible
         if($message['status'] == 200){
 
-            // Check the request method
-            if($this->Request->getMethod() == "POST"){
+            // Retrieve the parameters
+            $parameters = $message['data']['parameters'];
 
-                // Retrieve the parameters
-                $parameters = $this->Request->getParams('REQUEST');
+            // Initialize the fields array
+            $fields = ["assignedTo" => $this->Auth->user()->id];
 
-                // Sanitize the parameters
-                foreach($parameters as $key => $value){
-                    if(empty($value)){
-                        unset($parameters[$key]);
-                    } else {
-                        if(!in_array($key,['targetTable','targetId'])){
-                            if(in_array($key,['tags','industries']) && !is_array($value)){
-                                $value = json_decode($value, true);
-                                $parameters[$key] = $value;
-                            }
-                            if(!is_array($value)){
-                                $parameters[$key] = ucwords(strtolower($value));
-                            } else {
-                                foreach($value as $k => $v){
-                                    $parameters[$key][$k] = ucwords(strtolower($v));
-                                }
-                            }
-                        }
-                    }
+            // Initialize the vCard
+            $message['data']['record']['vcard'] = $this->Model->Vcards->fetch($message['data']['record']['vcard']['id']);
+
+            // Check if the Event Plugin is accessible
+            if($this->Helper->Core->isInstalled('event')){
+
+                // Initialize the Events
+                $message['data']['event'] = [];
+
+                // Setup a new event
+                $event = [
+                    'category' => 'Followup',
+                    'message' => 'New Followup Created by <vcard>'.$this->Auth->user()->vcard['id'].':'.$this->Auth->user()->username.'</vcard>',
+                    'icon' => 'circle',
+                    'color' => 'secondary',
+                    'link' => '/plugin/'.$message['data']['record']['targetTable'].'/details?id='.$message['data']['record']['targetId'],
+                    'targetTable' => 'followups',
+                    'targetId' => $message['data']['record']['id'],
+                ];
+
+                // Create the event
+                $message['data']['event'][] = $this->Model->Event->create($event);
+
+                // Setup a new event for the target
+                $event['targetTable'] = $message['data']['record']['targetTable'];
+                $event['targetId'] = $message['data']['record']['targetId'];
+
+                // Create the event
+                $message['data']['event'][] = $this->Model->Event->create($event);
+
+                // Check if the vCards Plugin is accessible
+                if($this->Helper->Core->isInstalled('vcards')){
+
+                    // Setup a new event for the vcard
+                    $event['targetTable'] = 'vcards';
+                    $event['targetId'] = $message['data']['record']['vcard']['id'];
+
+                    // Create the event
+                    $message['data']['event'][] = $this->Model->Event->create($event);
+                }
+            }
+
+            // Check if the Tasks Plugin is accessible
+            if($this->Helper->Core->isInstalled('tasks')){
+
+                // Initialize the record
+                $record = [];
+
+                // Retrieve the followup process
+                $process = $this->Model->Process->fetchByTable('followups', $parameters['category']);
+                $record['process'] = $process['process'];
+
+                // Complete the task record
+                $record['label'] = '';
+                $record['category'] = $parameters['category'];
+                $record['assignedTo'] = $this->Auth->user()->id;
+                $record['due'] = $parameters['due'] ?? null;
+                $record['progress'] = 0;
+                $record['scale'] = count($record['process']);
+                $record['color'] = 'primary';
+                $record['link'] = '/plugin/'.$message['data']['record']['root']['targetTable'].'/details?id='.$message['data']['record']['root']['targetId'];
+                $record['targetTable'] = 'followups';
+                $record['targetId'] = $message['data']['record']['id'];
+
+                // Check if the target object contains a vCard
+                if(isset($message['data']['record']['target']) && isset($message['data']['record']['target']['vcard'])){
+                    $message['data']['record']['target']['vcard'] = $this->Model->Vcards->fetch($message['data']['record']['target']['vcard']['id'] ?? $message['data']['record']['target']['vcard']);
+                    $record['label'] = '<vcard success>'.$message['data']['record']['target']['vcard']['id'].':'.$message['data']['record']['target']['vcard']['name'].'</vcard>';
                 }
 
-                // Set Required Fields
-                $required = ['category','vcard','due','targetTable','targetId'];
-
-                // Set Optional Fields
-                $optional = [];
-
-                // Set Unique Fields
-                $unique = ['id','created','modified','owner','organization'];
-
-                // Check if all required fields are set
-                if(count(array_intersect_key(array_flip($required), $parameters)) == count($required)){
-
-                    // Initialize the Events
-                    $message['data']['events'] = [];
-
-                    // Retrieve the lead process
-                    $process = $this->Model->Process->get($parameters['category']);
-
-                    // Retrieve the user's username and vCard
-                    $owner = $this->Auth->user()->username;
-                    $assignedTo = $this->Auth->user()->id;
-                    $organization = $this->Auth->user()->organization()->id;
-                    $vCard = $this->Auth->user()->vcard();
-
-                    // Initialize the vCard
-                    $vcard = $this->Model->Vcards->get($parameters['vcard']);
-
-                    // Create a Lead
-                    $followup = [
-                        'category' => $parameters['category'],
-                        'owner' => $owner,
-                        'assignedTo' => $assignedTo,
-                        'organization' => $organization,
-                        'vcard' => $vcard['id'],
-                        'targetTable' => $parameters['targetTable'],
-                        'targetId' => $parameters['targetId'],
-                    ];
-                    $followupId = $this->Model->Followups->create($followup);
-
-                    // Create a Task
-                    $task = [
-                        'label' => '',
-                        'category' => $parameters['category'],
-                        'progress' => 0,
-                        'scale' => count($process['process']),
-                        'color' => 'primary',
-                        'link' => '/plugin/tasks?id=',
-                        'owner' => $owner,
-                        'assignedTo' => $assignedTo,
-                        'process' => $process['process'],
-                        'due' => $parameters['due'],
-                        'isActive' => 1,
-                        'targetTable' => "followups",
-                        'targetId' => $followupId,
-                    ];
-
-                    // Retrieve the target object
-                    $Query = $DATABASE->query()
-                        ->table($parameters['targetTable'])
-                        ->select('*')
-                        ->where('id',$parameters['targetId'])
-                        ->where('id',9999,'<>')
-                        ->limit(1);
-                    $target = $Query->fetch()[0] ?? [];
-
-                    // Check if the target object contains a vCard
-                    if(isset($target['vcard'])){
-                        $target['vcard'] = $this->Model->Vcards->get($target['vcard']);
-                        $task['label'] = '<vcard success>'.$target['vcard']['id'].':'.$target['vcard']['name'].'</vcard>'.$task['label'];
-                    }
-
-                    // Set the Task Label
-                    if($vcard['id'] != $target['vcard']['id']){
-                        $task['label'] .= '<vcard>' . $vcard['id'] . ':' . $vcard['name'] . (!empty($vcard['title']) ? ' - ' . $vcard['title'] : '') . '</vcard>';
-                    }
-                    $task['label'] .= '<tel>'.$vcard['phone'].'</tel>';
-
-                    // Create the Task
-                    $taskId = $this->Model->Tasks->create($task);
-
-                    // Update the Task link
-                    switch($parameters['category']){
-                        case 'Lead':
-                        case 'Client':
-                        case 'Call':
-                        case 'Callback':
-                        case 'Appointment':
-                            $task['link'] = '/plugin/'.$parameters['targetTable'].'/details?id='.$parameters['targetId'];
-                            if(isset($target['vcard'])){
-                                $task['link'] .= '&name='.urlencode($target['vcard']['name']);
-                            }
-                            break;
-                        default:
-                            $task['link'] = '/plugin/tasks?id='.$taskId;
-                            break;
-                    }
-                    $affectedRows = $this->Model->Tasks->update($taskId, ['link' => $task['link']]);
-
-                    // Update the Follow-up
-                    $affectedRows = $this->Model->Followups->update($followupId, ['task' => $taskId]);
-
-                    // Create the related events
-                    $message['data']['events'][] = $this->Model->Event->create($owner, 'tasks', $taskId, $parameters['category'], 'New Task Created for <vcard>'.$vCard['id'].':'.$this->Auth->user()->username.'</vcard>', '/plugin/tasks/index?id='.$taskId);
-                    $message['data']['events'][] = $this->Model->Event->create($owner, 'vcards', $vcard['id'], $parameters['category'], 'New '.$parameters['category'].' schedule with <vcard>'.$vcard['id'].':'.$vcard['name'].'</vcard> by <vcard>'.$vCard['id'].':'.$this->Auth->user()->username.'</vcard>', '/plugin/tasks/index?id='.$taskId);
-                    $message['data']['events'][] = $this->Model->Event->create($owner, 'followups', $followupId, $parameters['category'], 'New '.$parameters['category'].' schedule with <vcard>'.$vcard['id'].':'.$vcard['name'].'</vcard> by <vcard>'.$vCard['id'].':'.$this->Auth->user()->username.'</vcard>', '/plugin/tasks/index?id='.$taskId);
-
-                    // Check if a target object has been created
-                    if($taskId && $followupId){
-
-                        // Retrieve the final lead
-                        $message['data']['record'] = $this->Model->Followups->get($followupId);
-
-                        if(isset($parameters['targetTable']) && isset($parameters['targetId'])){
-
-                            // Create the an event
-                            $message['data']['events'][] = $this->Model->Event->create($owner, $parameters['targetTable'], $parameters['targetId'], $parameters['category'], 'New '.$parameters['category'].' schedule with <vcard>'.$vcard['id'].':'.$vcard['name'].'</vcard> by <vcard>'.$vCard['id'].':'.$this->Auth->user()->username.'</vcard>');
-                        }
-                    } else {
-                        $message['status'] = 500;
-                        $message['message'] = "Internal Server Error";
-                        $message['data']['error'] = "The followup could not be created.";
-                    }
-                } else {
-                    $message['status'] = 400;
-                    $message['message'] = "Bad Request";
-                    $message['data']['error'] = "Some required fields are missing.";
+                // Set the Task Label
+                if($message['data']['record']['vcard']['id'] != $message['data']['record']['target']['vcard']['id']){
+                    $record['label'] .= '<vcard>' . $message['data']['record']['vcard']['id'] . ':' . $message['data']['record']['vcard']['name'] . (!empty($message['data']['record']['vcard']['title']) ? ' - ' . $message['data']['record']['vcard']['title'] : '') . '</vcard>';
                 }
-            } else {
-                $message = ["status" => 405, "message" => "Method Not Allowed", "data" => "The method is not allowed for the requested URL."];
+                $record['label'] .= '<tel>'.$message['data']['record']['vcard']['phone'].'</tel>';
+
+                // Create the task
+                // var_dump($record);
+                $fields['task'] = $this->Model->Tasks->create($record);
+
+                // Check if the Event Plugin is accessible
+                if($this->Helper->Core->isInstalled('event')){
+
+                    // Setup a new event
+                    $event = [
+                        'category' => 'Task',
+                        'message' => 'New Task Created for <vcard>'.$message['data']['record']['vcard']['id'].':'.$message['data']['record']['vcard']['name'].'</vcard> by <vcard>'.$this->Auth->user()->vcard['id'].':'.$this->Auth->user()->username.'</vcard>',
+                        'icon' => 'circle',
+                        'color' => 'secondary',
+                        'link' => $record['link'],
+                        'targetTable' => 'followups',
+                        'targetId' => $message['data']['record']['id'],
+                    ];
+
+                    // Create the event
+                    $message['data']['event'][] = $this->Model->Event->create($event);
+
+                    // Setup a new event for the root object
+                    $event['targetTable'] = $message['data']['record']['root']['targetTable'];
+                    $event['targetId'] = $message['data']['record']['root']['targetId'];
+
+                    // Create the event
+                    $message['data']['event'][] = $this->Model->Event->create($event);
+
+                    // Setup a new event for the task
+                    $event['link'] = '/plugin/tasks/index?id='.$fields['task'];
+                    $event['targetTable'] = 'tasks';
+                    $event['targetId'] = $fields['task'];
+
+                    // Create the event
+                    $message['data']['event'][] = $this->Model->Event->create($event);
+                }
+            }
+
+            // Check if $fields is empty
+            if(!empty($fields)){
+                $affectedRows = $this->Model->{$this->name}->update($message['data']['record']['id'], $fields);
+
+                // Check if we send out the notification
+                if($affectedRows){
+
+                    // Retrieve the updated record
+                    $message['data']['record'] = $this->Model->{$this->name}->fetch($message['data']['record']['id']);
+                }
             }
         }
 
+        // Return the message
         return $message;
     }
 
     /**
-     * Archive a Follow-Up
+     * Update a record
+     */
+    public function updateAction(): array
+    {
+        // Call the parent constructor
+        $message = parent::updateAction();
+
+        // Check if the record is accessible
+        if($message['status'] == 200){
+
+            // Check if the Event Plugin is accessible
+            if($this->Helper->Core->isInstalled('event')){
+
+                // Initialize the Events
+                $message['data']['event'] = [];
+
+                // Setup a new event
+                $event = [
+                    'category' => 'Followup',
+                    'message' => 'Followup Updated by <vcard>'.$this->Auth->user()->vcard['id'].':'.$this->Auth->user()->username.'</vcard>',
+                    'icon' => 'circle',
+                    'color' => 'secondary',
+                    'link' => '/plugin/'.$message['data']['record']['targetTable'].'/details?id='.$message['data']['record']['targetId'],
+                    'targetTable' => $message['data']['record']['targetTable'],
+                    'targetId' => $message['data']['record']['targetId'],
+                ];
+
+                // Create the event
+                $message['data']['event'][] = $this->Model->Event->create($event);
+            }
+        }
+
+        // Return the message
+        return $message;
+    }
+
+    /**
+     * Delete a record
+     */
+    public function deleteAction(): array
+    {
+        // Call the parent constructor
+        $message = parent::deleteAction();
+
+        // Check if the record is accessible
+        if($message['status'] == 200){
+
+            // Check if the Event Plugin is accessible
+            if($this->Helper->Core->isInstalled('event')){
+
+                // Initialize the Events
+                $message['data']['event'] = [];
+
+                // Setup a new event
+                $event = [
+                    'category' => 'Followup',
+                    'message' => 'Followup Deleted by <vcard>'.$this->Auth->user()->vcard['id'].':'.$this->Auth->user()->username.'</vcard>',
+                    'icon' => 'circle',
+                    'color' => 'secondary',
+                    'link' => '/plugin/'.$message['data']['record']['targetTable'].'/details?id='.$message['data']['record']['targetId'],
+                    'targetTable' => $message['data']['record']['targetTable'],
+                    'targetId' => $message['data']['record']['targetId'],
+                ];
+
+                // Create the event
+                $message['data']['event'][] = $this->Model->Event->create($event);
+            }
+        }
+
+        // Return the message
+        return $message;
+    }
+
+    /**
+     * Archive a record
      */
     public function archiveAction(): array
     {
-        // Set the default message
-        $message = ["status" => 200, "message" => "OK", "data" => []];
+        // Call the parent constructor
+        $message = parent::archiveAction();
 
-        // Retrieve the Follow-Up
-        $followup = $this->Model->Followups->get(intval($this->Request->getParams('GET','id')));
-
-        // Check if the Follow-Up is accessible
-        if(empty($followup)){
-            $message = ["status" => 404, "message" => "Not Found", "data" => "Could not find the requested followup."];
-        } else {
-            if($followup['organization']['id'] != $this->Auth->user()->organization()->id){
-                $message = ["status" => 403, "message" => "Forbidden", "data" => "You are not allowed to access this followup."];
-            }
-        }
-
-        // Check if the Note is accessible
+        // Check if the record is accessible
         if($message['status'] == 200){
 
-            // Check the request method
-            if($this->Request->getMethod() == "GET"){
+            // Check if the Event Plugin is accessible
+            if($this->Helper->Core->isInstalled('event')){
 
-                // Update the Follow-Up
-                $this->Model->Followups->update($followup['id'], ["isArchived" => 1]);
+                // Initialize the Events
+                $message['data']['event'] = [];
 
-                // Update the Task
-                $this->Model->Tasks->update($followup['task']['id'], ["isActive" => 0]);
+                // Setup a new event
+                $event = [
+                    'category' => 'Followup',
+                    'message' => 'Followup Archived by <vcard>'.$this->Auth->user()->vcard['id'].':'.$this->Auth->user()->username.'</vcard>',
+                    'icon' => 'circle',
+                    'color' => 'secondary',
+                    'link' => '/plugin/'.$message['data']['record']['targetTable'].'/details?id='.$message['data']['record']['targetId'],
+                    'targetTable' => $message['data']['record']['targetTable'],
+                    'targetId' => $message['data']['record']['targetId'],
+                ];
 
-                // Retrieve the Updated Follow-Up
-                $message["data"]["record"] = $this->Model->Followups->get($followup['id']);
-            } else {
-                $message = ["status" => 400, "message" => "Bad Request", "data" => "Invalid Request Method"];
+                // Create the event
+                $message['data']['event'][] = $this->Model->Event->create($event);
             }
         }
 
+        // Return the message
         return $message;
     }
 
     /**
-     * Recover a Follow-Up
+     * Recover a record
      */
     public function recoverAction(): array
     {
-        // Set the default message
-        $message = ["status" => 200, "message" => "OK", "data" => []];
+        // Call the parent constructor
+        $message = parent::recoverAction();
 
-        // Retrieve the Follow-Up
-        $followup = $this->Model->Followups->get(intval($this->Request->getParams('GET','id')));
-
-        // Check if the Follow-Up is accessible
-        if(empty($followup)){
-            $message = ["status" => 404, "message" => "Not Found", "data" => "Could not find the requested followup."];
-        } else {
-            if($followup['organization']['id'] != $this->Auth->user()->organization()->id){
-                $message = ["status" => 403, "message" => "Forbidden", "data" => "You are not allowed to access this followup."];
-            }
-        }
-
-        // Check if the Note is accessible
+        // Check if the record is accessible
         if($message['status'] == 200){
 
-            // Check the request method
-            if($this->Request->getMethod() == "GET"){
+            // Check if the Event Plugin is accessible
+            if($this->Helper->Core->isInstalled('event')){
 
-                // Update the Follow-Up
-                $affectedRows = $this->Model->Followups->update($followup['id'], ["isArchived" => 0]);
+                // Initialize the Events
+                $message['data']['event'] = [];
 
-                // Retrieve the Updated Follow-Up
-                $message["data"]["record"] = $this->Model->Followups->get($followup['id']);
-            } else {
-                $message = ["status" => 400, "message" => "Bad Request", "data" => "Invalid Request Method"];
+                // Setup a new event
+                $event = [
+                    'category' => 'Followup',
+                    'message' => 'Followup Recovered by <vcard>'.$this->Auth->user()->vcard['id'].':'.$this->Auth->user()->username.'</vcard>',
+                    'icon' => 'circle',
+                    'color' => 'secondary',
+                    'link' => '/plugin/'.$message['data']['record']['targetTable'].'/details?id='.$message['data']['record']['targetId'],
+                    'targetTable' => $message['data']['record']['targetTable'],
+                    'targetId' => $message['data']['record']['targetId'],
+                ];
+
+                // Create the event
+                $message['data']['event'][] = $this->Model->Event->create($event);
             }
         }
 
+        // Return the message
         return $message;
     }
 }
