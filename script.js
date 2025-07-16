@@ -531,7 +531,7 @@ const FollowupsTable = function(category, followups, container, defaults = {}, c
             datatable:{
                 columnDefs:columnDefs,
                 buttons:buttons,
-                order: [[5, 'asc']],
+                order: [[5, 'desc']],
             },
             dblclick:function(event, table, dt, node, data){
                 actions.details.action(event, table, dt, node, null, data);
