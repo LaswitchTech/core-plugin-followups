@@ -103,9 +103,6 @@ builder.add('widgets','followups', class extends builder.ComponentClass {
                 name: 'contact',
                 data: 'vcard.name',
                 defaultContent: '',
-                render: function(data, type, row) {
-                    return '<div>'+data+'</div>';
-                },
                 responsivePriority: 1,
             },
             {
@@ -114,14 +111,8 @@ builder.add('widgets','followups', class extends builder.ComponentClass {
                 title: builder.Locale.get('Status'),
                 className: 'min-md',
                 name: 'status',
-                data: null,
+                data: 'task.progress',
                 defaultContent: '',
-                render: function(data, type, row) {
-                    var color = (row.task.process === null || typeof row.task.process[row.task.progress] === "undefined") ? 'success' : row.task.process[row.task.progress].color;
-                    var icon = (row.task.process === null || typeof row.task.process[row.task.progress] === "undefined") ? 'asterisk' : row.task.process[row.task.progress].icon;
-                    var name = (row.task.process === null || typeof row.task.process[row.task.progress] === "undefined") ? builder.Locale.get('New') : row.task.process[row.task.progress].name;
-                    return '<div><h5><span class="badge text-bg-'+color+'" data-type="status" data-task="'+row.task.id+'"><i class="me-1 bi bi-'+icon+'"></i>'+name+'</span></h5></div>';
-                },
                 responsivePriority: 2,
             },
             {
@@ -132,12 +123,6 @@ builder.add('widgets','followups', class extends builder.ComponentClass {
                 name: 'priority',
                 data: 'task.priority',
                 defaultContent: 0,
-                render: function(data, type, row) {
-                    let color = ['secondary','primary','warning','orange','danger'];
-                    let name = ['Low','Normal','High','Urgent','Critical'];
-                    let icon = ['exclamation-triangle','info-circle','exclamation-circle','exclamation-diamond','exclamation-square'];
-                    return '<div><h5><span class="badge text-bg-'+color[row.task.priority]+'" data-type="priority" data-task="'+row.task.id+'"><i class="me-1 bi bi-'+icon[row.task.priority]+'"></i>'+builder.Locale.get(name[row.task.priority])+'</span></h5></div>';
-                },
                 responsivePriority: 1100,
             },
             {
@@ -146,11 +131,8 @@ builder.add('widgets','followups', class extends builder.ComponentClass {
                 title: builder.Locale.get('Assigned To'),
                 className: 'min-md',
                 name: 'assignedTo',
-                data: 'assignedTo.username',
+                data: 'task.assignedTo.username',
                 defaultContent: '',
-                render: function(data, type, row) {
-                    return '<div><img class="avatar" alt="'+data+'" src="/avatar?username='+data+'"><span>'+data+'</span></div>';
-                },
                 responsivePriority: 100,
             },
             {
@@ -161,22 +143,6 @@ builder.add('widgets','followups', class extends builder.ComponentClass {
                 name: 'due',
                 data: 'task.due',
                 defaultContent: '',
-                render: function(data, type, row) {
-                    setInterval(function(){
-                        $('[data-type="followups"] [data-type="due"]:not(.rendered)').each(function(){
-                            const tooltip = new Date($(this).find('time').attr('datetime') ?? new Date().toISOString());
-                            $(this).attr({
-                                'title': tooltip.toLocaleString(),
-                                'data-bs-toggle': 'tooltip',
-                                'title': tooltip.toLocaleString(),
-                                'data-bs-title': tooltip.toLocaleString(),
-                            }).addClass('rendered');
-                            new bootstrap.Tooltip($(this));
-                            $(this).find('time').timeago();
-                        });
-                    },100);
-                    return '<div data-type="due"><i class="bi bi-clock me-1"></i><time datetime="'+data+'"></time></div>';
-                },
                 responsivePriority: 1000,
             },
         ];
