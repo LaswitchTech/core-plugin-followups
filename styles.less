@@ -97,19 +97,14 @@
     }
 }
 
-// @media (min-width: 992px) {
-//     .files-explorer{
-//         .files-container>* {
-//             flex: 0 0 auto !important;
-//             width: 50%;
-//         }
-//     }
-// }
-// @media (min-width: 1400px) {
-//     .files-explorer{
-//         .files-container>* {
-//             flex: 0 0 auto !important;
-//             width: 33.33333333%;
-//         }
-//     }
-// }
+@media screen and (max-width: 992px) {
+    .followups-feed {
+        .dataTables_wrapper {
+            .followups-footer {
+                .dataTables_info {
+                    display:none;
+                }
+            }
+        }
+    }
+}
