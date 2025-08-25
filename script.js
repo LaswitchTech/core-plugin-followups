@@ -160,8 +160,7 @@ const FollowupModalCreate = function(fields = {}, dt = null, callback = null){
             },
             function(modal,component){
                 const componentModal = component;
-                component.header.addClass('text-bg-success');
-                component.body.addClass('text-bg-dark');
+                component.addClass('modal-success');
                 component.footer.submit.addClass('btn-success').removeClass('btn-link').attr({
                     "style": "border-bottom-right-radius: var(--bs-modal-inner-border-radius) !important;border-bottom-left-radius: var(--bs-modal-inner-border-radius) !important;",
                 }).text(builder.Locale.get('Create'));
@@ -381,7 +380,7 @@ const FollowupModalArchive = function(followup, table, row){
             const componentModal = component;
 
             // Style the modal
-            component.header.addClass('text-bg-dark');
+            component.addClass('modal-dark');
             component.footer.submit.addClass('btn-dark').removeClass('btn-link').attr({
                 "style": "border-bottom-right-radius: var(--bs-modal-inner-border-radius) !important;border-bottom-left-radius: var(--bs-modal-inner-border-radius) !important;",
             }).text(builder.Locale.get('Archive'));

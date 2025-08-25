@@ -18,6 +18,38 @@ class FollowupsModel extends BaseModel {
     }
 
     /**
+     * Initialize the Model
+     *
+     * @param string $table
+     * @param string|null $primary
+     * @return void
+     */
+    protected function init(string $table, ?string $primary = 'id'): void
+    {
+        // Call the parent init method
+        parent::init($table, $primary);
+
+        // Loop through the additional tables to join
+        foreach($this->definition as $field => $col){
+
+            // Exclude fields
+            if(in_array(strtolower($field), ['id', 'created', 'modified', 'isarchived', 'iscompleted', 'targettable', 'targetid'])) continue;
+
+            // Set the fieldTable
+            $fieldTable = in_array($field,['owner', 'assignedTo']) ? 'users' : $field . 's';
+            $fieldTable = in_array($field,['category']) ? 'categories' : $fieldTable;
+
+            // Initialize the Schema
+            $schema = $this->Database->schema()->define($fieldTable);
+
+            // Describe the table
+            foreach($schema->describe() as $column){
+                $this->definition[$field.'.'.$column['Field']] = $column;
+            }
+        }
+    }
+
+    /**
      * Process a record
      *
      * @param array $record
@@ -82,9 +114,9 @@ class FollowupsModel extends BaseModel {
             ->table($this->table)
             ->select('*')
             ->join('owner', 'users', 'username')
-            ->join('assignedTo', 'users', 'id')
             ->join('vcard', 'vcards', 'id')
             ->join('task', 'tasks', 'id')
+            ->join('task.assignedTo', 'users', 'id')
             ->join('organization', 'organizations', 'id')
             ->filter()
             ->where('id', 9999, '<>')
@@ -139,8 +171,6 @@ class FollowupsModel extends BaseModel {
             ->table($this->table)
             ->select('*')
             ->join('owner', 'users', 'username')
-            ->join('assignedTo', 'users', 'id')
-            ->join('assignedTo.vcard', 'vcards', 'id')
             ->join('vcard', 'vcards', 'id')
             ->join('task', 'tasks', 'id')
             ->join('organization', 'organizations', 'id')
