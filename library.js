@@ -94,9 +94,6 @@ builder.add('widgets','followups', class extends builder.ComponentClass {
                 title: builder.Locale.get('ID'),
                 name: 'id',
                 data: 'id',
-                render: function(data, type, row) {
-                    return '<div>'+data+'</div>';
-                }
             },
             {
                 targets: 1,
