@@ -202,9 +202,7 @@ builder.add('widgets','followups', class extends builder.ComponentClass {
                 self.datatable(datatable);
 
                 // Add Records
-                for(const [key, record] of Object.entries(self._properties.data ?? {})){
-                    self.add(record);
-                }
+                self.load(self._properties.data);
 
                 // Check if autoStart is enabled
                 if(self._properties.autoStart){
