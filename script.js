@@ -551,27 +551,9 @@ const FollowupsTable = function(category, followups, container, defaults = {}, c
 
 // Create a followup
 function process_function_FollowupCreate(task, value, callback = null){
-
-    // Check if the target is set
-    if(typeof task.target === 'undefined' && typeof callback === "function"){
-        callback(task);
-    }
-
-    //Open the Create Followup Modal
-    var fields = {category: value,targetTable: task.targetTable, targetId: task.targetId};
-
-    // Check if target has a target
-    if(typeof task.target.targetTable !== 'undefined' && typeof task.target.targetId !== 'undefined'){
-        fields.targetTable = task.target.targetTable;
-        fields.targetId = task.target.targetId;
-    }
-
-    // Launch the modal
-    FollowupModalCreate(fields, null,function(followup){
-
-        // Execute Callback
+    builder.Widget('followups',{render:false,type:value,targetTable:task.root.targetTable,targetId:task.root.targetId}).create(function(response){
         if(typeof callback === "function"){
-            callback(task, followup);
+            callback(task, value, response);
         }
     });
 };
