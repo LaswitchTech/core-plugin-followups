@@ -553,7 +553,7 @@ const FollowupsTable = function(category, followups, container, defaults = {}, c
 function process_function_FollowupCreate(task, value, callback = null){
     builder.Widget('followups',{render:false,type:value,targetTable:task.root.targetTable,targetId:task.root.targetId}).create(function(response){
         if(typeof callback === "function"){
-            callback(task, value);
+            callback(task, value, response);
         }
     });
 };

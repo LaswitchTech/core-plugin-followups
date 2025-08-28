@@ -449,11 +449,6 @@ builder.add('widgets','followups', class extends builder.ComponentClass {
                                                                         // Add the Followup
                                                                         self.add(response.record);
 
-                                                                        // Open the task if the followup is a Call
-                                                                        if(self._properties.type.toLowerCase() === 'call'){
-                                                                            self._builder.Widget('task',{data: response.record.task.id}).view();
-                                                                        }
-
                                                                         // Execute the callback
                                                                         if(typeof callback === 'function'){
                                                                             callback(response);
@@ -461,6 +456,11 @@ builder.add('widgets','followups', class extends builder.ComponentClass {
 
                                                                         // Close the modal
                                                                         modal.hide();
+
+                                                                        // Open the task if the followup is a Call
+                                                                        if(self._properties.type.toLowerCase() === 'call'){
+                                                                            self._builder.Widget('task',{data: response.record.task.id}).view();
+                                                                        }
                                                                     }
                                                                 });
                                                             },
