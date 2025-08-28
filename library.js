@@ -153,7 +153,7 @@ builder.add('widgets','followups', class extends builder.ComponentClass {
         }
 
         // Set Column Order
-        this._properties.datatable.order = [[0, 'desc']];
+        this._properties.datatable.order = [[5, 'asc']];
 
         // Setup Placeholder
         this._properties.datatable.initComplete = function(param) {
