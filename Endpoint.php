@@ -88,67 +88,79 @@ class FollowupsEndpoint extends BaseEndpoint {
 
                 // Retrieve the followup process
                 $process = $this->Model->Process->fetchByTable('followups', $parameters['category']);
-                $record['process'] = $process['process'];
 
-                // Complete the task record
-                $record['label'] = '';
-                $record['category'] = $parameters['category'];
-                $record['assignedTo'] = $this->Auth->user()->id;
-                $record['due'] = $parameters['due'] ?? null;
-                $record['progress'] = 0;
-                $record['scale'] = count($record['process']);
-                $record['color'] = 'primary';
-                $record['link'] = '/plugin/'.$message['data']['record']['root']['targetTable'].'/details?id='.$message['data']['record']['root']['targetId'];
-                $record['targetTable'] = 'followups';
-                $record['targetId'] = $message['data']['record']['id'];
+                // Check if a process was found
+                if(!empty($process)){
+                    $record['process'] = $process['process'];
 
-                // Check if the target object contains a vCard
-                if(isset($message['data']['record']['target']) && isset($message['data']['record']['target']['vcard'])){
-                    $message['data']['record']['target']['vcard'] = $this->Model->Vcards->fetch($message['data']['record']['target']['vcard']['id'] ?? $message['data']['record']['target']['vcard']);
-                    $record['label'] = '<vcard success>'.$message['data']['record']['target']['vcard']['id'].':'.$message['data']['record']['target']['vcard']['name'].'</vcard>';
-                }
+                    // Complete the task record
+                    $record['label'] = '';
+                    $record['category'] = $parameters['category'];
+                    $record['assignedTo'] = $this->Auth->user()->id;
+                    $record['due'] = $parameters['due'] ?? null;
+                    $record['progress'] = 0;
+                    $record['scale'] = count($record['process']);
+                    $record['color'] = 'primary';
+                    $record['link'] = '/plugin/'.$message['data']['record']['root']['targetTable'].'/details?id='.$message['data']['record']['root']['targetId'];
+                    $record['targetTable'] = 'followups';
+                    $record['targetId'] = $message['data']['record']['id'];
 
-                // Set the Task Label
-                if($message['data']['record']['vcard']['id'] != $message['data']['record']['target']['vcard']['id']){
-                    $record['label'] .= '<vcard>' . $message['data']['record']['vcard']['id'] . ':' . $message['data']['record']['vcard']['name'] . (!empty($message['data']['record']['vcard']['title']) ? ' - ' . $message['data']['record']['vcard']['title'] : '') . '</vcard>';
-                }
-                $record['label'] .= '<tel>'.$message['data']['record']['vcard']['phone'].'</tel>';
+                    // Check if the target object contains a vCard
+                    if(isset($message['data']['record']['target']) && isset($message['data']['record']['target']['vcard'])){
+                        $message['data']['record']['target']['vcard'] = $this->Model->Vcards->fetch($message['data']['record']['target']['vcard']['id'] ?? $message['data']['record']['target']['vcard']);
+                        $record['label'] = '<vcard success>'.$message['data']['record']['target']['vcard']['id'].':'.$message['data']['record']['target']['vcard']['name'].'</vcard>';
+                    }
 
-                // Create the task
-                // var_dump($record);
-                $fields['task'] = $this->Model->Tasks->create($record);
+                    // Set the Task Label
+                    if($message['data']['record']['vcard']['id'] != $message['data']['record']['target']['vcard']['id']){
+                        $record['label'] .= '<vcard>' . $message['data']['record']['vcard']['id'] . ':' . $message['data']['record']['vcard']['name'] . (!empty($message['data']['record']['vcard']['title']) ? ' - ' . $message['data']['record']['vcard']['title'] : '') . '</vcard>';
+                    }
+                    $record['label'] .= '<tel>'.$message['data']['record']['vcard']['phone'].'</tel>';
 
-                // Check if the Event Plugin is accessible
-                if($this->Helper->Core->isInstalled('event')){
+                    // Create the task
+                    // var_dump($record);
+                    $fields['task'] = $this->Model->Tasks->create($record);
 
-                    // Setup a new event
-                    $event = [
-                        'category' => 'Task',
-                        'message' => 'New Task Created for <vcard>'.$message['data']['record']['vcard']['id'].':'.$message['data']['record']['vcard']['name'].'</vcard> by <vcard>'.$this->Auth->user()->vcard['id'].':'.$this->Auth->user()->username.'</vcard>',
-                        'icon' => 'circle',
-                        'color' => 'secondary',
-                        'link' => $record['link'],
-                        'targetTable' => 'followups',
-                        'targetId' => $message['data']['record']['id'],
+                    // Check if the Event Plugin is accessible
+                    if($this->Helper->Core->isInstalled('event')){
+
+                        // Setup a new event
+                        $event = [
+                            'category' => 'Task',
+                            'message' => 'New Task Created for <vcard>'.$message['data']['record']['vcard']['id'].':'.$message['data']['record']['vcard']['name'].'</vcard> by <vcard>'.$this->Auth->user()->vcard['id'].':'.$this->Auth->user()->username.'</vcard>',
+                            'icon' => 'circle',
+                            'color' => 'secondary',
+                            'link' => $record['link'],
+                            'targetTable' => 'followups',
+                            'targetId' => $message['data']['record']['id'],
+                        ];
+
+                        // Create the event
+                        $message['data']['event'][] = $this->Model->Event->create($event);
+
+                        // Setup a new event for the root object
+                        $event['targetTable'] = $message['data']['record']['root']['targetTable'];
+                        $event['targetId'] = $message['data']['record']['root']['targetId'];
+
+                        // Create the event
+                        $message['data']['event'][] = $this->Model->Event->create($event);
+
+                        // Setup a new event for the task
+                        $event['link'] = '/plugin/tasks/index?id='.$fields['task'];
+                        $event['targetTable'] = 'tasks';
+                        $event['targetId'] = $fields['task'];
+
+                        // Create the event
+                        $message['data']['event'][] = $this->Model->Event->create($event);
+                    }
+                } else {
+                    $this->Model->{$this->name}->delete($message['data']['record']['id']);
+                    $fields = [];
+                    $message = [
+                        'status' => 400,
+                        'message' => 'No followup process found for category '.$parameters['category'].'. Please create one before creating a followup.',
+                        'data' => []
                     ];
-
-                    // Create the event
-                    $message['data']['event'][] = $this->Model->Event->create($event);
-
-                    // Setup a new event for the root object
-                    $event['targetTable'] = $message['data']['record']['root']['targetTable'];
-                    $event['targetId'] = $message['data']['record']['root']['targetId'];
-
-                    // Create the event
-                    $message['data']['event'][] = $this->Model->Event->create($event);
-
-                    // Setup a new event for the task
-                    $event['link'] = '/plugin/tasks/index?id='.$fields['task'];
-                    $event['targetTable'] = 'tasks';
-                    $event['targetId'] = $fields['task'];
-
-                    // Create the event
-                    $message['data']['event'][] = $this->Model->Event->create($event);
                 }
             }
 
