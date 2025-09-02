@@ -32,20 +32,26 @@ class FollowupsModel extends BaseModel {
         // Loop through the additional tables to join
         foreach($this->definition as $field => $col){
 
-            // Exclude fields
-            if(in_array(strtolower($field), ['id', 'created', 'modified', 'isarchived', 'iscompleted', 'targettable', 'targetid'])) continue;
+            // Check if the field contains a dot
+            if(strpos($field, '.') !== false) continue;
 
-            // Set the fieldTable
-            $fieldTable = in_array($field,['owner', 'assignedTo']) ? 'users' : $field . 's';
-            $fieldTable = in_array($field,['category']) ? 'categories' : $fieldTable;
+            // Set the table
+            $table = in_array(explode('.',$field)[1],['owner', 'assignedTo']) ? 'users' : explode('.',$field)[1] . 's';
+            $table = in_array(explode('.',$field)[1],['category']) ? 'categories' : $table;
 
-            // Initialize the Schema
-            $schema = $this->Database->schema()->define($fieldTable);
+            // Check if the field is linked to a table
+            if(in_array($table, $this->tables)){
 
-            // Describe the table
-            foreach($schema->describe() as $column){
-                $this->definition[$field.'.'.$column['Field']] = $column;
-            }
+                // Initialize the Schema
+                $schema = $this->Database->schema()->define($table);
+
+                // Describe the table
+                foreach($schema->describe() as $col){
+
+                    // Add the col to the definition
+                    $this->definition[$field.'.'.$col['Field']] = $col;
+                }
+            };
         }
     }
 
