@@ -33,7 +33,7 @@ class FollowupsModel extends BaseModel {
         foreach($this->definition as $field => $col){
 
             // Check if the field contains a dot
-            if(strpos($field, '.') !== false) continue;
+            if(strpos($field, '.') === false) continue;
 
             // Set the table
             $table = in_array(explode('.',$field)[1],['owner', 'assignedTo']) ? 'users' : explode('.',$field)[1] . 's';
