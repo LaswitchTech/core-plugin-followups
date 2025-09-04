@@ -34,7 +34,7 @@ builder.add('widgets','followups', class extends builder.ComponentClass {
         this._properties.class.table = 'followups-table';
         this._properties.class.footer = 'followups-footer';
         this._properties.standardSearch = true;
-        this._properties.advancedSearch = false;
+        this._properties.advancedSearch = true;
         this._properties.showButtonsLabel = false;
 
         // Table Actions
