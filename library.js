@@ -239,27 +239,16 @@ builder.add('widgets','followups', class extends builder.ComponentClass {
         }
 
         // Retrieve Followups
-        $.ajax({
-            url: '/api/followups/fetchAll',
-            headers: {'X-CSRF-Authorization': CSRF_KEY},
-            type: 'POST',dataType: 'json',
-            data: {
-                conditions: [
-                    {key: 'targetTable', operator: '=', value: this._properties.targetTable},
-                    {key: 'targetId', operator: '=', value: this._properties.targetId},
-                    {key: 'task.isArchived', operator: '<>', value: 1},
-                    {key: 'isArchived', operator: '<>', value: 1},
-                ]
-            },
-            error: function(xhr, status, error) {
-                console.error('Error fetching data:', error);
-            },
-            success: function(response) {
-
-                // Add Feed Posts
-                for(const [key, record] of Object.entries(response.records)){
-                    self.add(record);
-                }
+        API.endpoint('/followups/fetchAll').data({
+            conditions: [
+                {key: 'targetTable', operator: '=', value: this._properties.targetTable},
+                {key: 'targetId', operator: '=', value: this._properties.targetId},
+                {key: 'task.isArchived', operator: '<>', value: 1},
+                {key: 'isArchived', operator: '<>', value: 1},
+            ]
+        }).execute(function(response){
+            for(const [key, record] of Object.entries(response.records)){
+                self.add(record);
             }
         });
 
@@ -352,185 +341,154 @@ builder.add('widgets','followups', class extends builder.ComponentClass {
                                 }
 
                                 // Ajax Request
-                                $.ajax({
-                                    url: '/api/'+self._properties.targetTable+'/fetch?id='+self._properties.targetId,
-                                    headers: {'X-CSRF-Authorization': CSRF_KEY},
-                                    type: 'GET',dataType: 'json',
-                                    error: function(xhr, status, error) {
-                                        console.error('Error fetching data:', error);
+                                API.endpoint('/'+self._properties.targetTable+'/fetch?id='+self._properties.targetId).execute(function(response){
+                                    const target = response.record;
+                                    addOptions([target]);
+
+                                    // Ajax Request
+                                    API.endpoint('/contacts/fetchAll').data({
+                                        conditions: [
+                                            {key: 'targetTable', operator: '=', value: self._properties.targetTable},
+                                            {key: 'targetId', operator: '=', value: self._properties.targetId},
+                                            {key: 'isArchived', operator: '<>', value: 1},
+                                        ]
+                                    }).execute(function(response){
+                                        const contacts = response.records;
+                                        addOptions(contacts);
+
+                                        // Create the Form
+                                        self._builder.Utility(
+                                            'form',
+                                            component.body,
+                                            {
+                                                class:{
+                                                    component: 'row row-cols-1 row-cols-md-2 g-3',
+                                                },
+                                                callback: {
+                                                    val: function(values){
+
+                                                        // Set the default values
+                                                        values.category = self._properties.type;
+                                                        values.targetTable = self._properties.targetTable;
+                                                        values.targetId = self._properties.targetId;
+                                                        values.due = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+                                                        // Check if the followup is a Call
+                                                        if(self._properties.type.toLowerCase() !== 'call'){
+
+                                                            // Set the date and time
+                                                            values.date = values.date || new Date().toISOString().slice(0, 10);
+                                                            values.time = values.time || new Date().toISOString().slice(11, 16);
+
+                                                            // Combine date and time into due
+                                                            values.due = values.date + ' ' + values.time;
+
+                                                            // Remove date and time from values
+                                                            delete values.date;
+                                                            delete values.time;
+                                                        }
+
+                                                        // Return the values
+                                                        return values;
+                                                    },
+                                                    submit: function(form){
+
+                                                        // Show the modal spinner
+                                                        modal.spinner(true);
+
+                                                        // Create the followup
+                                                        API.endpoint('/followups/create').data(form.val()).execute(function(response){
+
+                                                            // Add the Followup
+                                                            self.add(response.record);
+
+                                                            // Execute the callback
+                                                            if(typeof callback === 'function'){
+                                                                callback(response);
+                                                            }
+
+                                                            // Close the modal
+                                                            modal.hide();
+
+                                                            // Open the task if the followup is a Call
+                                                            if(self._properties.type.toLowerCase() === 'call'){
+                                                                self._builder.Widget('task',{data: response.record.task.id}).view();
+                                                            }
+                                                        },function(){
+                                                            modal.hide();
+                                                        });
+                                                    },
+                                                }
+                                            },
+                                            function(form,component){
+
+                                                // Add event listener on the modal submit button
+                                                parent.content.footer.submit.click(function(e){
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    form.submit();
+                                                });
+
+                                                // vcard
+                                                form.add(
+                                                    'select2',
+                                                    {
+                                                        name: 'vcard',
+                                                        label: self._builder.Locale.get('Contact'),
+                                                        placeholder: self._builder.Locale.get('Select a Contact'),
+                                                        options: options,
+                                                        value: self._properties.default,
+                                                        required: true,
+                                                        class: {
+                                                            component: 'col-12',
+                                                            label: 'text-bg-primary',
+                                                        },
+                                                    }
+                                                );
+
+                                                // date
+                                                if(self._properties.type.toLowerCase() !== 'call'){
+                                                    form.add(
+                                                        'date',
+                                                        {
+                                                            name: 'date',
+                                                            label: self._builder.Locale.get('Date'),
+                                                            placeholder: self._builder.Locale.get('Enter a Date'),
+                                                            required: true,
+                                                            class: {
+                                                                component: 'col-12 col-md-6',
+                                                                label: 'text-bg-primary',
+                                                            },
+                                                        }
+                                                    );
+                                                }
+
+                                                // time
+                                                if(self._properties.type.toLowerCase() !== 'call'){
+                                                    form.add(
+                                                        'time',
+                                                        {
+                                                            name: 'time',
+                                                            label: self._builder.Locale.get('Time'),
+                                                            placeholder: self._builder.Locale.get('Enter a Time'),
+                                                            class: {
+                                                                component: 'col-12 col-md-6',
+                                                            },
+                                                        }
+                                                    );
+                                                }
+
+                                                // Resolve the promise
+                                                resolve();
+                                            },
+                                        );
+                                    },function(xhr, status, error){
                                         modal.hide();
                                         reject(error);
-                                    },
-                                    success: function(response) {
-
-                                        // Set the target
-                                        const target = response.record;
-
-                                        // Add the target to the options
-                                        addOptions([target]);
-
-                                        // Ajax Request
-                                        $.ajax({
-                                            url: '/api/contacts/fetchAll',
-                                            headers: {'X-CSRF-Authorization': CSRF_KEY},
-                                            type: 'POST',dataType: 'json',
-                                            data: {
-                                                conditions: [
-                                                    {key: 'targetTable', operator: '=', value: self._properties.targetTable},
-                                                    {key: 'targetId', operator: '=', value: self._properties.targetId},
-                                                    {key: 'isArchived', operator: '<>', value: 1},
-                                                ]
-                                            },
-                                            error: function(xhr, status, error) {
-                                                console.error('Error fetching data:', error);
-                                                modal.hide();
-                                                reject(error);
-                                            },
-                                            success: function(response) {
-
-                                                // Set the contacts
-                                                const contacts = response.records;
-
-                                                // Add the contacts to the options
-                                                addOptions(contacts);
-
-                                                // Create the Form
-                                                self._builder.Utility(
-                                                    'form',
-                                                    component.body,
-                                                    {
-                                                        class:{
-                                                            component: 'row row-cols-1 row-cols-md-2 g-3',
-                                                        },
-                                                        callback: {
-                                                            val: function(values){
-
-                                                                // Set the default values
-                                                                values.category = self._properties.type;
-                                                                values.targetTable = self._properties.targetTable;
-                                                                values.targetId = self._properties.targetId;
-                                                                values.due = new Date().toISOString().slice(0, 19).replace('T', ' ');
-
-                                                                // Check if the followup is a Call
-                                                                if(self._properties.type.toLowerCase() !== 'call'){
-
-                                                                    // Set the date and time
-                                                                    values.date = values.date || new Date().toISOString().slice(0, 10);
-                                                                    values.time = values.time || new Date().toISOString().slice(11, 16);
-
-                                                                    // Combine date and time into due
-                                                                    values.due = values.date + ' ' + values.time;
-
-                                                                    // Remove date and time from values
-                                                                    delete values.date;
-                                                                    delete values.time;
-                                                                }
-
-                                                                // Return the values
-                                                                return values;
-                                                            },
-                                                            submit: function(form){
-
-                                                                // Show the modal spinner
-                                                                modal.spinner(true);
-
-                                                                // Create the followup
-                                                                $.ajax({
-                                                                    url: '/api/followups/create',
-                                                                    headers: {'X-CSRF-Authorization': CSRF_KEY},
-                                                                    type: 'POST',dataType: 'json',
-                                                                    data: form.val(),
-                                                                    error: function(xhr, status, error) {
-                                                                        console.error('Error fetching data:', error);
-                                                                        modal.hide();
-                                                                    },
-                                                                    success: function(response) {
-
-                                                                        // Add the Followup
-                                                                        self.add(response.record);
-
-                                                                        // Execute the callback
-                                                                        if(typeof callback === 'function'){
-                                                                            callback(response);
-                                                                        }
-
-                                                                        // Close the modal
-                                                                        modal.hide();
-
-                                                                        // Open the task if the followup is a Call
-                                                                        if(self._properties.type.toLowerCase() === 'call'){
-                                                                            self._builder.Widget('task',{data: response.record.task.id}).view();
-                                                                        }
-                                                                    }
-                                                                });
-                                                            },
-                                                        }
-                                                    },
-                                                    function(form,component){
-
-                                                        // Add event listener on the modal submit button
-                                                        parent.content.footer.submit.click(function(e){
-                                                            e.preventDefault();
-                                                            e.stopPropagation();
-                                                            form.submit();
-                                                        });
-
-                                                        // vcard
-                                                        form.add(
-                                                            'select2',
-                                                            {
-                                                                name: 'vcard',
-                                                                label: self._builder.Locale.get('Contact'),
-                                                                placeholder: self._builder.Locale.get('Select a Contact'),
-                                                                options: options,
-                                                                value: self._properties.default,
-                                                                required: true,
-                                                                class: {
-                                                                    component: 'col-12',
-                                                                    label: 'text-bg-primary',
-                                                                },
-                                                            }
-                                                        );
-
-                                                        // date
-                                                        if(self._properties.type.toLowerCase() !== 'call'){
-                                                            form.add(
-                                                                'date',
-                                                                {
-                                                                    name: 'date',
-                                                                    label: self._builder.Locale.get('Date'),
-                                                                    placeholder: self._builder.Locale.get('Enter a Date'),
-                                                                    required: true,
-                                                                    class: {
-                                                                        component: 'col-12 col-md-6',
-                                                                        label: 'text-bg-primary',
-                                                                    },
-                                                                }
-                                                            );
-                                                        }
-
-                                                        // time
-                                                        if(self._properties.type.toLowerCase() !== 'call'){
-                                                            form.add(
-                                                                'time',
-                                                                {
-                                                                    name: 'time',
-                                                                    label: self._builder.Locale.get('Time'),
-                                                                    placeholder: self._builder.Locale.get('Enter a Time'),
-                                                                    class: {
-                                                                        component: 'col-12 col-md-6',
-                                                                    },
-                                                                }
-                                                            );
-                                                        }
-
-                                                        // Resolve the promise
-                                                        resolve();
-                                                    },
-                                                );
-                                            },
-                                        });
-                                    },
+                                    });
+                                },function(xhr, status, error){
+                                    modal.hide();
+                                    reject(error);
                                 });
                             } catch(e) { reject(e); }
                         });
