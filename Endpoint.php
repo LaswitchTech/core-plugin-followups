@@ -101,9 +101,19 @@ class FollowupsEndpoint extends BaseEndpoint {
                     $record['progress'] = 0;
                     $record['scale'] = count($record['process']);
                     $record['color'] = 'primary';
-                    $record['link'] = '/plugin/'.$message['data']['record']['root']['targetTable'].'/details?id='.$message['data']['record']['root']['targetId'];
+                    $record['link'] = '/'.$message['data']['record']['root']['targetTable'].'/details?id='.$message['data']['record']['root']['targetId'];
                     $record['targetTable'] = 'followups';
                     $record['targetId'] = $message['data']['record']['id'];
+
+                    // Add exceptions for some tables
+                    switch($message['data']['record']['root']['targetTable']){
+                        case 'clients':
+                            $record['link'] = '/clients/details?id='.$message['data']['record']['root']['targetId'];
+                            break;
+                        case 'leads':
+                            $record['link'] = '/crm/details?id='.$message['data']['record']['root']['targetId'];
+                            break;
+                    }
 
                     // Check if the target object contains a vCard
                     if(isset($message['data']['record']['target']) && isset($message['data']['record']['target']['vcard'])){
@@ -146,7 +156,7 @@ class FollowupsEndpoint extends BaseEndpoint {
                         $message['data']['event'][] = $this->Model->Event->create($event);
 
                         // Setup a new event for the task
-                        $event['link'] = '/plugin/tasks/index?id='.$fields['task'];
+                        $event['link'] = '/tasks/index?id='.$fields['task'];
                         $event['targetTable'] = 'tasks';
                         $event['targetId'] = $fields['task'];
 
