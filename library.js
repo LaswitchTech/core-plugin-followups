@@ -232,17 +232,25 @@ builder.add('widgets','followups', class extends builder.ComponentClass {
         // Set Self
         const self = this;
 
-        // Check if records are provided
-        if(records !== null && Object.entries(records).length > 0){
-
-            // Loop through the records
+        // Create a loader function
+        const loader = function(records){
             for(const [key, record] of Object.entries(records)){
                 self.add(record);
             }
-            return this;
+            self.datatable().rows().every(function(rowIdx, tableLoop, rowLoop){
+                if(typeof records[this.data()['id']] === 'undefined'){
+                    self.datatable().row(rowIdx).remove();
+                }
+            });
+            return self;
+        };
+
+        // Check if records are provided
+        if(records !== null && Object.entries(records).length > 0){
+            return loader(records);
         }
 
-        // Retrieve Followups
+        // Retrieve Records
         API.endpoint('/followups/fetchAll').data({
             conditions: [
                 {key: 'targetTable', operator: '=', value: this._properties.targetTable},
@@ -251,9 +259,7 @@ builder.add('widgets','followups', class extends builder.ComponentClass {
                 {key: 'isArchived', operator: '<>', value: 1},
             ]
         }).execute(function(response){
-            for(const [key, record] of Object.entries(response.records)){
-                self.add(record);
-            }
+            return loader(response.records);
         });
 
         return this;
