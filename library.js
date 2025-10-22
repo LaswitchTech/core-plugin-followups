@@ -234,14 +234,14 @@ builder.add('widgets','followups', class extends builder.ComponentClass {
 
         // Create a loader function
         const loader = function(records){
+            self.datatable()._datatable.rows().every(function(rowIdx, tableLoop, rowLoop){
+                if(typeof records[this.data()['id']] === 'undefined'){
+                    self.datatable()._datatable.row(rowIdx).remove();
+                }
+            });
             for(const [key, record] of Object.entries(records)){
                 self.add(record);
             }
-            self.datatable().rows().every(function(rowIdx, tableLoop, rowLoop){
-                if(typeof records[this.data()['id']] === 'undefined'){
-                    self.datatable().row(rowIdx).remove();
-                }
-            });
             return self;
         };
 
