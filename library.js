@@ -234,7 +234,7 @@ builder.add('widgets','followups', class extends builder.ComponentClass {
 
         // Create a loader function
         const loader = function(records){
-            if(self.datatable() !== null){
+            if(self.datatable() !== null && self.datatable()._datatable !== null){
                 self.datatable()._datatable.rows().every(function(rowIdx, tableLoop, rowLoop){
                     if(typeof records[this.data()['id']] === 'undefined'){
                         self.datatable()._datatable.row(rowIdx).remove();
